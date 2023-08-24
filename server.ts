@@ -116,27 +116,24 @@ interface IStatus extends Document {
 
 const Status = mongoose.model<IStatus>("Status", statusSchema);
 
-app.post(
-  "/user/create",
-  async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+app.post("/user/create", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
 
-    try {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.sendStatus(409);
-      }
-      const saltRounds = process.env.BCRYPT_SALT_ROUNDS || 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      const user = new User({ email, password: hashedPassword });
-
-      await user.save();
-      return res.sendStatus(201);
-    } catch (error) {
-      console.error(error);
+  try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.sendStatus(409);
     }
+    const saltRounds = process.env.BCRYPT_SALT_ROUNDS || 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const user = new User({ email, password: hashedPassword });
+
+    await user.save();
+    return res.sendStatus(201);
+  } catch (error) {
+    console.error(error);
   }
-);
+});
 
 app.post("/user/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -169,20 +166,10 @@ app.get("/api/books", async (req: Request, res: Response) => {
 
 app.post("/api/books", async (req: Request, res: Response) => {
   try {
-    const { title, username, email, author, genre, date, description, imgUrl } =
-      req.body;
-    const newBook = new Book({
-      title,
-      username,
-      email,
-      author,
-      genre,
-      date,
-      description,
-      imgUrl,
-    });
-    await newBook.save();
-    res.status(201).json(newBook);
+    const body = req.body;
+    const book = new Book(body);
+    await book.save();
+    res.status(201).json(book);
   } catch (error) {
     res.status(500).json({ message: "Error while creating book" });
   }
@@ -213,7 +200,7 @@ app.patch("/api/books/:id", async (req: Request, res: Response) => {
   try {
     const updatedBookData: IBook = req.body;
     const updatedBook = await Book.findByIdAndUpdate(id, updatedBookData, {
-      new: true
+      new: true,
     });
     res.json(updatedBook);
   } catch (error) {
@@ -232,7 +219,7 @@ app.delete("/api/books/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/reviews/:id", async (req: Request, res: Response) => {
+app.get("/api/book/reviews/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const reviews = await Review.find({ bookId: id });
@@ -242,16 +229,17 @@ app.get("/api/reviews/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/reviews", async (req: Request, res: Response) => {
-  const { bookId, email, review } = req.body;
+app.post("/api/book/reviews", async (req: Request, res: Response) => {
+  const body = req.body;
   try {
-    const newReview = new Review({ bookId, email, review });
-    await newReview.save();
+    const review = new Review(body);
+    await review.save();
     res.status(201).json(review);
-  } catch (error) {
+  }
+  catch (error) {
     res.status(500).json({ message: "Error while creating review" });
   }
-})
+});
 
 app.get("/api/book/status/:email", async (req: Request, res: Response) => {
   const { email } = req.params;
@@ -264,23 +252,27 @@ app.get("/api/book/status/:email", async (req: Request, res: Response) => {
 });
 
 app.post("/api/book/status", async (req: Request, res: Response) => {
-  const { bookId, title, author, genre, email, status } = req.body;
+  const body = req.body;
   try {
-    const newStatus = new Status({ bookId, email, title, author, genre, status });
-    await newStatus.save();
+    const status = new Status(body);
+    await status.save();
     res.status(201).json(status);
   } catch (error) {
     res.status(500).json({ message: "Error while creating status" });
-    }
-})
+  }
+});
 
 app.patch("/api/book/status/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const updatedStatusData: IStatus = req.body;
-    const updatedStatus = await Status.findByIdAndUpdate(id, updatedStatusData, {
-      new: true
-    });
+    const updatedStatus = await Status.findByIdAndUpdate(
+      id,
+      updatedStatusData,
+      {
+        new: true,
+      }
+    );
     res.json(updatedStatus);
   } catch (error) {
     res.status(500).json({ message: "Error updating status" });
@@ -299,4 +291,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
