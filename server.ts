@@ -23,21 +23,15 @@ const client = new MongoClient(uri, {
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authorization = req.headers.authorization;
   if (!authorization) {
-    return res
-      .status(401)
-      .send({ error: true, message: "unauthorized access" });
+    return res.send({ error: true, message: "unauthorized access" });
   }
   const token = authorization.split(" ")[1];
   if (!token || token === "") {
-    return res.status(401).send({ error: true, message: "unauthorized token" });
+    return res.send({ error: true, message: "unauthorized token" });
   }
-  const jwtToken = process.env.JWT_SECRET_TOKEN as string;
-  try {
-    jwt.verify(token, jwtToken);
-    next();
-  } catch (error) {
-    return res.status(500).send("Error verifying token");
-  }
+  // const jwtToken = process.env.JWT_SECRET_TOKEN as string;
+  // jwt.verify(token, jwtToken);
+  next();
 };
 
 async function run() {
@@ -58,52 +52,39 @@ async function run() {
       const user = req.body;
       const JWToken = process.env.JWT_SECRET_TOKEN as Secret;
       const token = jwt.sign(user, JWToken);
-      res.send({ token });
+      return res.send({ token });
     });
 
-    app.post("/auth/user/create", async (req: Request, res: Response) => {
-      try {
-        const data = req.body;
-        const { name, email, password, role } = data;
-        const existingUser = await userCollection.findOne({ email });
-        if (existingUser) {
-          res.send("User already exists");
-        }
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = { name, email, password: hashedPassword, role };
-        console.log(user);
-        const result = await userCollection.insertOne(user);
-        res.status(200).send(result);
-      } catch (error) {
-        console.log(error);
+    app.post("/api/auth/sign-up", async (req: Request, res: Response) => {
+      const data = req.body;
+      const { name, email, password } = data;
+      const existingUser = await userCollection.findOne({ email });
+      if (existingUser) {
+        return res.send("User already exists");
       }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = { name, email, password: hashedPassword };
+      const result = await userCollection.insertOne(user);
+      return res.send(result);
     });
 
-    app.post("/auth/user/login", async (req: Request, res: Response) => {
-      try {
-        const { email, password } = req.body;
-        const user = await userCollection.findOne({ email });
-        if (!user) {
-          res.send("User does not exist");
-        }
-        const isPasswordCorrect = await bcrypt.compare(
-          password,
-          user?.password
-        );
-        if (!isPasswordCorrect) {
-          res.send("Password is incorrect");
-        }
-        const payload = {
-          userId: user?._id,
-          email: user?.email,
-          role: user?.role,
-        };
-        const JWTtoken = process.env.JWT_SECRET_TOKEN as Secret;
-        const token = jwt.sign(payload, JWTtoken);
-        res.status(200).send(token);
-      } catch (error) {
-        console.log(error);
+    app.post("/api/auth/sign-in", async (req: Request, res: Response) => {
+      const { email, password } = req.body;
+      const user = await userCollection.findOne({ email });
+      if (!user) {
+        return res.send("User does not exist");
       }
+      const isPasswordCorrect = await bcrypt.compare(password, user?.password);
+      if (!isPasswordCorrect) {
+        return res.send("Password is incorrect");
+      }
+      const payload = {
+        user: user.name,
+        email: user.email,
+      };
+      const JWTtoken = process.env.JWT_SECRET_TOKEN as Secret;
+      const token = jwt.sign(payload, JWTtoken);
+      return res.json(token);
     });
 
     app.get(
@@ -111,65 +92,56 @@ async function run() {
       authMiddleware,
       async (_req: Request, res: Response) => {
         const users = await userCollection.find({}).toArray();
-        res.send(users);
+        return res.send(users);
       }
     );
 
     app.get("/api/books", async (_req: Request, res: Response) => {
       const books = await booksCollection.find({}).toArray();
-      res.send(books);
+      return res.send(books);
     });
 
     app.post(
       "/api/books",
       authMiddleware,
       async (req: Request, res: Response) => {
-        try {
-          const token = req.headers.authorization?.split(" ")[1];
-          console.log(token);
-          const decodedToken = jwt.decode(token as string);
-          const { userId } = decodedToken as { userId: string };
-          const book = req.body;
-          book.userId = userId;
-          const data = { userId: userId, ...book };
-          const result = await booksCollection.insertOne(data);
-          res.status(200).send(result);
-        } catch (error) {
-          console.log(error);
-        }
+        const token = req.headers.authorization?.split(" ")[1];
+        const decodedToken = jwt.decode(token as string);
+        const { user, email } = decodedToken as { user: string, email: string };
+        const book = req.body;
+        book.user = user;
+        book.email = email;
+        const result = await booksCollection.insertOne(book);
+        return res.send(result);
       }
     );
 
     app.get("/api/books/:id", async (req: Request, res: Response) => {
       const id = req.params.id;
       const book = await booksCollection.findOne({ _id: new ObjectId(id) });
-      res.send(book);
+      return res.send(book);
     });
 
     app.patch(
       "/api/books/:id",
       authMiddleware,
       async (req: Request, res: Response) => {
-        try {
-          const token = req.headers.authorization?.split(" ")[1];
-          const decodedToken = jwt.decode(token as string);
-          const { userId } = decodedToken as { userId: string };
-          const { id } = req.params;
-          const findBook = await booksCollection.findOne({
-            _id: new ObjectId(id),
-          });
-          if (findBook?.userId !== userId) {
-            return res.status(401).send("Unauthorized access");
-          }
-          const book = req.body;
-          const result = await booksCollection.updateOne(
-            { _id: new ObjectId(id) },
-            { $set: book }
-          );
-          res.status(200).send(result);
-        } catch (error) {
-          console.log(error);
+        const book = req.body;
+        const { id } = req.params;
+        const token = req.headers.authorization?.split(" ")[ 1 ] as string;
+        const decodedToken = jwt.decode(token);
+        const { email } = decodedToken as { email: string };
+        const findBook = await booksCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        if (findBook?.email !== email) {
+          return res.send("Unauthorized access");
         }
+        const result = await booksCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: book }
+        );
+        return res.send(result);
       }
     );
 
@@ -177,84 +149,108 @@ async function run() {
       "/api/books/:id",
       authMiddleware,
       async (req: Request, res: Response) => {
-        const token = req.headers.authorization?.split(" ")[1];
-        const decodedToken = jwt.decode(token as string);
-        const { userId } = decodedToken as { userId: string };
-        const { id } = req.params;
+        try {
+          const { id } = req.params;
+        const token = req.headers.authorization?.split(" ")[ 1 ] as string;
+        const decodedToken = jwt.decode(token);
+        const { email } = decodedToken as { email: string };
         const findBook = await booksCollection.findOne({
           _id: new ObjectId(id),
         });
-        if (findBook?.userId !== userId) {
-          return res.status(401).send("Unauthorized access");
+        if (findBook?.email !== email) {
+          return res.send("Unauthorized access");
         }
         const result = await booksCollection.deleteOne({
           _id: new ObjectId(id),
         });
-        res.send(result);
+        return res.send(result);
+        } catch (error: any) {
+          console.error(error.message);
+        }
       }
     );
 
-    app.get("/api/reviews/:id", async (req: Request, res: Response) => {
-      const { id } = req.params;
+    app.get("/api/reviews/:bookId", async (req: Request, res: Response) => {
+      const { bookId } = req.params;
       const result = await reviewsCollection
-        .find({ bookId: new ObjectId(id) })
+        .find({ bookId })
         .toArray();
-      res.send(result);
+      return res.send(result);
     });
 
-    app.post("/api/reviews/:id", authMiddleware, async (req: Request, res: Response) => {
-      const { id } = req.params;
-      const token = req.headers.authorization?.split(" ")[ 1 ];
-      const decodedToken = jwt.decode(token as string);
-      const { userId } = decodedToken as { userId: string };
-      const data = req.body;
-      data.bookId = id;
-      data.userId = userId;
-      const result = await reviewsCollection.insertOne(data);
-      console.log(result)
-      res.send(result);
-    });
-
-    app.get("/api/status", authMiddleware, async (req: Request, res: Response) => {
-      const token = req.headers.authorization?.split(" ")[ 1 ];
-      const decodedToken = jwt.decode(token as string);
-      const { email } = decodedToken as { email: string };
-      const status = await statusCollection.find({ email }).toArray();
-      res.send(status);
-    });
-
-    app.post("/api/status", authMiddleware, async (req: Request, res: Response) => {
-      const token = req.headers.authorization?.split(" ")[ 1 ];
-      const decodedToken = jwt.decode(token as string);
-      const { email } = decodedToken as { email: string };
-      const findUser = await userCollection.findOne({ email });
-      if (!findUser) {
-        return res.status(401).send("Unauthorized access");
+    app.post(
+      "/api/reviews/:bookId",
+      authMiddleware,
+      async (req: Request, res: Response) => {
+        const { bookId } = req.params;
+        const token = req.headers.authorization?.split(" ")[1] as string;
+        const decodedToken = jwt.decode(token);
+        const { user, email } = decodedToken as { user: string; email: string };
+        const data = req.body;
+        data.bookId = bookId;
+        data.user = user;
+        data.email = email;
+        const result = await reviewsCollection.insertOne(data);
+        return res.send(result);
       }
-      const status = req.body;
-      status.email = email;
-      console.log(status)
-      const result = await statusCollection.insertOne(status);
-      res.send(result);
-    });
+    );
 
-    app.patch("/api/status/:id", authMiddleware, async (req: Request, res: Response) => {
-      const id = req.params.id;
-      const status = req.body;
-      const result = await statusCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: status }
-      );
-      res.send(result);
-    });
+    app.get(
+      "/api/status",
+      authMiddleware,
+      async (req: Request, res: Response) => {
+        const token = req.headers.authorization?.split(" ")[1];
+        const decodedToken = jwt.decode(token as string);
+        const { email } = decodedToken as { email: string };
+        const status = await statusCollection.find({ email }).toArray();
+        return res.send(status);
+      }
+    );
 
-    app.delete("/api/status/:id", authMiddleware, async (req: Request, res: Response) => {
-      const id = req.params.id;
-      const result = await statusCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
-      res.send(result);
-    });
+    app.post(
+      "/api/status",
+      authMiddleware,
+      async (req: Request, res: Response) => {
+        const token = req.headers.authorization?.split(" ")[1] as string;
+        const decodedToken = jwt.decode(token);
+        const { user, email } = decodedToken as { user: string, email: string };
+        const findUser = await userCollection.findOne({ email });
+        if (!findUser) {
+          return res.send("Unauthorized access");
+        }
+        const status = req.body;
+        status.user = user;
+        status.email = email;
+        const result = await statusCollection.insertOne(status);
+        return res.send(result);
+      }
+    );
+
+    app.patch(
+      "/api/status/:id",
+      authMiddleware,
+      async (req: Request, res: Response) => {
+        const {id} = req.params;
+        const status = req.body;
+        const result = await statusCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: status }
+        );
+        return res.send(result);
+      }
+    );
+
+    app.delete(
+      "/api/status/:id",
+      authMiddleware,
+      async (req: Request, res: Response) => {
+        const {id} = req.params;
+        const result = await statusCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        return res.send(result);
+      }
+    );
   } catch (error) {
     console.log(error);
   }
