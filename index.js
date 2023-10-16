@@ -29,18 +29,13 @@ const authMiddleware = (req, res, next) => {
   if (!token || token === "") {
     return res.send({ error: true, message: "unauthorized token" });
   }
-  // const jwtToken = process.env.JWT_SECRET_TOKEN as string;
-  // jwt.verify(token, jwtToken);
+  const jwtToken = process.env.JWT_SECRET_TOKEN;
+  jwt.verify(token, jwtToken);
   next();
 };
 
 async function run() {
   try {
-    await client.connect();
-    await client.db("book_catalog").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
 
     const database = client.db("book_catalog");
     const userCollection = database.collection("users");
@@ -269,17 +264,29 @@ async function run() {
       });
       return res.send(result);
     });
+    
+    await client.connect();
+    await client.db("book_catalog").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
+
   } catch (error) {
     console.log(error);
   }
 }
-run().catch(console.dir);
+
+run();
+
+app.get("/api", (_req, res) => {
+  res.send("api is running successfully!");
+});
 
 app.get("/", (_req, res) => {
   res.send("React ts server is running!");
 });
 
-const port = 5000;
+const port = process.env.PORT;
 app.listen(port, () => {
   console.log(`Backend app listening on port ${port}`);
 });
