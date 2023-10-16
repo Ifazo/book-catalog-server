@@ -35,7 +35,6 @@ const authMiddleware = (req, res, next) => {
 };
 
 async function run() {
-  try {
 
     const database = client.db("book_catalog");
     const userCollection = database.collection("users");
@@ -265,18 +264,13 @@ async function run() {
       return res.send(result);
     });
     
-    await client.connect();
-    await client.db("book_catalog").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
-  } catch (error) {
-    console.log(error);
-  }
 }
 
-run();
+run().catch(console.dir);
 
 app.get("/api", (_req, res) => {
   res.send("api is running successfully!");
