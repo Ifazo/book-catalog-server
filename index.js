@@ -31,11 +31,11 @@ const authMiddleware = (req, res, next) => {
 };
 
 async function run() {
-  const database = client.db("book_catalog");
-  const userCollection = database.collection("users");
-  const booksCollection = database.collection("books");
-  const reviewsCollection = database.collection("reviews");
-  const statusCollection = database.collection("status");
+  const db = client.db("mongo_server");
+  const userCollection = db.collection("users");
+  const booksCollection = db.collection("books");
+  const reviewsCollection = db.collection("reviews");
+  const statusCollection = db.collection("status");
 
   app.get("/", (_req, res) => {
     res.send("React ts server is running!");
@@ -332,7 +332,7 @@ async function run() {
 
 run().catch(console.dir);
 
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 
 app.listen(port, () => {
   console.log(`Backend app listening on port ${port}`);
